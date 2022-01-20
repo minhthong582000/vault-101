@@ -1,0 +1,18 @@
+server:
+  affinity: ""
+  ha:
+    enabled: true
+
+injector:
+  enabled: false
+
+csi:
+  enabled: true
+  image:
+    repository: "hashicorp/vault-csi-provider"
+    tag: "0.4.0"
+    pullPolicy: IfNotPresent
+  daemonSet:
+    # Kubelet host path
+    kubeletRootDir: "/var/snap/microk8s/common/var/lib/kubelet"
+  debug: true
