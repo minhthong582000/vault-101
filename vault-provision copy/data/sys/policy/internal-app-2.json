@@ -1,0 +1,1 @@
+{"policy":"path \"secret/data/db-pass\" { capabilities = [\"read\", \"list\"]}"}
