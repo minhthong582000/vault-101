@@ -4,7 +4,11 @@ These are the artifacts for the [Vault Installation to Minikube via
 Helm](https://learn.hashicorp.com/vault/kubernetes/minikube) tutorial. Visit the
 learn site for detail.
 
-## 1. Delete old installation
+```bash
+helm repo add hashicorp https://helm.releases.hashicorp.com
+```
+
+## 1. (Optional) Delete old installation
 
 ```bash
 helm delete consul
