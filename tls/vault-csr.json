@@ -1,0 +1,29 @@
+{
+  "CN": "vault-consul",
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "hosts": [
+    "vault",
+    "vault.default.svc",
+    "vault.default.svc.cluster.local",
+    "consul-consul-ui",
+    "consul-consul-ui.default.svc",
+    "consul-consul-ui.default.svc.cluster.local",
+    "consul-consul-server",
+    "consul-consul-server.default.svc",
+    "consul-consul-server.default.svc.cluster.local",
+    "localhost",
+    "127.0.0.1"
+  ],
+  "names": [
+    {
+      "C": "AU",
+      "L": "Melbourne",
+      "O": "Kubernetes",
+      "OU": "Vault",
+      "ST": "Victoria"
+    }
+  ]
+}
