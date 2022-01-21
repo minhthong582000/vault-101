@@ -1,7 +1,52 @@
+global:
+  enabled: true
+  tlsDisable: true
+
 server:
   affinity: ""
+
+  volumes:
+    - name: consul-ca-cert
+      secret:
+        defaultMode: 420
+        items:
+          - key: tls.crt
+            path: tls.crt
+        secretName: consul-consul-ca-cert
+    - name: consul-server-cert
+      secret:
+        defaultMode: 420
+        secretName: consul-consul-server-cert
+
+  volumeMounts:
+    - mountPath: /vault/tls/ca/
+      name: consul-ca-cert
+      readOnly: true
+    - mountPath: /vault/tls/server/
+      name: consul-server-cert
+      readOnly: true
+
   ha:
     enabled: true
+    config: |
+      disable_mlock = true
+      ui = true
+
+      listener "tcp" {
+        tls_disable = 1
+        address = "[::]:8200"
+        cluster_address = "[::]:8201"
+      }
+      storage "consul" {
+        path = "vault"
+        address = "consul-consul-server:8501"
+        scheme        = "https"
+        tls_ca_file   = "/vault/tls/ca/tls.crt"
+        tls_cert_file = "/vault/tls/server/tls.crt"
+        tls_key_file  = "/vault/tls/server/tls.key"
+      }
+
+      service_registration "kubernetes" {}
 
 injector:
   enabled: false

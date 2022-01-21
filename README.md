@@ -37,15 +37,15 @@ kubectl exec vault-0 -- vault operator init -format=json > cluster-keys.json
 
 cat cluster-keys.json | jq -r ".unseal_keys_b64[]"
 
-8dWtFhkJG2c9bTKe0R1oDSYW24oW1YH5FvqQu5U/A9p4
-h3b+V+MdsZWEehFH6V/uezwV0b3y8VcxMbplDPRK6DJ+
-KKqZGJ8I7bTVij/u0PCyZX4csIgKdg2LDse7tYXqmeoy
-72aps31CzcCl3bi6ON2WhTnqU3rUzGBjZX2a0LrAsNOJ
-GsPOuHm989uzaTWlKGcePcOkSy9822QtcaGOqcbXz5AL
+hHE9RtL+wB2Qf4LGVhKtcOZy0Jnu6FZZWET9e/7715pO
+9CF7oB/dDRsF3o03f3IkfPHrfuciJeJWc6EZg7WmKf+q
+p4ua8kFPkKh4djWgUqPYqnZo/+VQc124urIKtp4vQF1Y
+ShRkX8ix/8ChwWvQsLYSDdqThOQidRhY13N/4jPl1duk
+ahLCi8lYEvocHofOojFDoTGWcvwYcD6f7X1c8xqVBHF6
 
-KEY_1=8dWtFhkJG2c9bTKe0R1oDSYW24oW1YH5FvqQu5U/A9p4
-KEY_2=h3b+V+MdsZWEehFH6V/uezwV0b3y8VcxMbplDPRK6DJ+
-KEY_3=KKqZGJ8I7bTVij/u0PCyZX4csIgKdg2LDse7tYXqmeoy
+KEY_1=hHE9RtL+wB2Qf4LGVhKtcOZy0Jnu6FZZWET9e/7715pO
+KEY_2=9CF7oB/dDRsF3o03f3IkfPHrfuciJeJWc6EZg7WmKf+q
+KEY_3=ahLCi8lYEvocHofOojFDoTGWcvwYcD6f7X1c8xqVBHF6
 
 kubectl exec vault-0 -- vault operator unseal $KEY_1
 kubectl exec vault-0 -- vault operator unseal $KEY_2
@@ -65,11 +65,11 @@ kubectl exec vault-2 -- vault operator unseal $KEY_3
 ```bash
 cat cluster-keys.json | jq -r ".root_token"
 
-ROOT_TOKEN=s.vgAgajvk4oDm27xJkz3J4bqj
+ROOT_TOKEN=s.GxBQlvt99odueHlQmT6fTe36
 
 kubectl exec --stdin=true --tty=true vault-0 -- /bin/sh
 
-vault login
+vault login $ROOT_TOKEN
 
 exit
 ```
@@ -224,7 +224,7 @@ kubectl delete -f deployment-01-webapp.yml
 kubectl delete -f deployment-orgchart.yaml
 ```
 
-Edit helm-vault-values.yml
+Edit helm-vault-values.yml, enable csi and disable injector:
 
 ```yaml
 server:
@@ -297,4 +297,97 @@ kubectl apply --filename spc-vault-database.yaml
 kubectl create serviceaccount webapp-sa
 
 kubectl apply --filename webapp-pod.yaml
+```
+
+## 9. Vault Best Practice
+
+### 9.1. Restrict the use of root policy, and write fine-grained policies to practice least privileged
+
+An admin user must be able to:
+
+- Read system health check
+
+- Create and manage ACL policies broadly across Vault
+
+- Enable and manage authentication methods broadly across Vault
+
+- Manage the Key-Value secrets engine enabled at secret/ path
+
+```bash
+kubectl exec -it vault-0 -- /bin/sh
+
+tee /vault/admin-policy.hcl <<EOF
+# Read system health check
+path "sys/health"
+{
+  capabilities = ["read", "sudo"]
+}
+
+# Create and manage ACL policies broadly across Vault
+
+# List existing policies
+path "sys/policies/acl"
+{
+  capabilities = ["list"]
+}
+
+# Create and manage ACL policies
+path "sys/policies/acl/*"
+{
+  capabilities = ["create", "read", "update", "delete", "list", "sudo"]
+}
+
+# Enable and manage authentication methods broadly across Vault
+
+# Manage auth methods broadly across Vault
+path "auth/*"
+{
+  capabilities = ["create", "read", "update", "delete", "list", "sudo"]
+}
+
+# Create, update, and delete auth methods
+path "sys/auth/*"
+{
+  capabilities = ["create", "update", "delete", "sudo"]
+}
+
+# List auth methods
+path "sys/auth"
+{
+  capabilities = ["read"]
+}
+
+# Enable and manage the key/value secrets engine at `secret/` path
+
+# List, create, update, and delete key/value secrets
+path "secret/*"
+{
+  capabilities = ["create", "read", "update", "delete", "list", "sudo"]
+}
+
+# Manage secrets engines
+path "sys/mounts/*"
+{
+  capabilities = ["create", "read", "update", "delete", "list", "sudo"]
+}
+
+# List existing secrets engines.
+path "sys/mounts"
+{
+  capabilities = ["read"]
+}
+EOF
+
+vault policy write admin admin-policy.hcl
+
+# Check token capabilities
+vault policy read admin
+
+# Generate admin token
+vault token create -format=json -policy="admin"
+ADMIN_TOKEN=s.hFSdR7TSsXdZmeWsjuBL6gG2
+vault login $ADMIN_TOKEN
+
+# Revoke root token (Can be generate using unseal keys)
+vault token revoke $ROOT_TOKEN
 ```

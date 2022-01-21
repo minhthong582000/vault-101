@@ -1,5 +1,10 @@
 global:
-  datacenter: vault-kubernetes-guide
+  gossipEncryption:
+    autoGenerate: true
+  tls:
+    enabled: true
+    enableAutoEncrypt: true
+    verify: true
 
 client:
   enabled: true
