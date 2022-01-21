@@ -5,6 +5,11 @@ global:
 server:
   affinity: ""
 
+  ingress:
+    enabled: true
+    hosts:
+      - host: vault.dp.vng.com.vn
+
   volumes:
     - name: consul-ca-cert
       secret:
