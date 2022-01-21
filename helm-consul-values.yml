@@ -10,7 +10,7 @@ client:
   enabled: true
 
 server:
-  replicas: 1
-  bootstrapExpect: 1
+  replicas: 3
+  bootstrapExpect: 3
   disruptionBudget:
     maxUnavailable: 0
