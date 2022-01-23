@@ -8,6 +8,21 @@ learn site for detail.
 helm repo add hashicorp https://helm.releases.hashicorp.com
 ```
 
+Run vault command line without exec into vault pods:
+
+```bash
+# On CentOS
+sudo yum install -y yum-utils
+sudo yum-config-manager --add-repo https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo
+sudo yum -y install vault
+
+export VAULT_ADDR='https://vault-address:port'
+export VAULT_TOKEN='vault-token'
+
+# Verify connection
+vault status
+```
+
 ## 1. (Optional) Delete old installation
 
 ```bash
@@ -420,7 +435,30 @@ vault write auth/userpass/users/your-username password=your-new-password
 
 ## 10. Database Secrets Engine
 
-The end-to-end scenario described in this tutorial involves two personas:
+### 10.1. Install postgreSQL using Bitnami helm chart:
+
+```bash
+helm repo add bitnami https://charts.bitnami.com/bitnami
+
+helm install postgresql bitnami/postgresql
+
+# To get the password for "postgres" run:
+
+export POSTGRES_PASSWORD=$(kubectl get secret --namespace default postgresql -o jsonpath="{.data.postgresql-password}" | base64 --decode)
+
+# To connect to your database run the following command:
+
+kubectl run postgresql-client --rm --tty -i --restart='Never' --namespace default --image docker.io/bitnami/postgresql:11.14.0-debian-10-r28 --env="PGPASSWORD=$POSTGRES_PASSWORD" --command -- psql --host postgresql -U postgres -d postgres -p 5432
+```
+
+After connecting to your database, run:
+
+```sql
+CREATE ROLE ro NOINHERIT;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO ro;
+```
+
+### 10.2. The end-to-end scenario described in this tutorial involves two personas
 
 - admin with privileged permissions to configure secrets engines
 - apps read the secrets from Vault
@@ -469,4 +507,220 @@ path "database/creds/readonly" {
 
 ```bash
 vault secrets enable database
+
+vault write database/config/postgresql \
+  plugin_name=postgresql-database-plugin \
+  connection_url="postgresql://{{username}}:{{password}}@postgresql:5432/postgres?sslmode=disable" \
+  allowed_roles=readonly \
+  username="postgres" \
+  password=$POSTGRES_PASSWORD
+```
+
+In the above step, you configured the PostgreSQL secrets engine with the allowed role named "readonly". A role is a logical name within Vault that maps to database credentials. These credentials are expressed as SQL statements and assigned to the Vault role.
+
+Define the SQL used to create credentials:
+
+```bash
+tee example/readonly.sql <<EOF
+CREATE ROLE "{{name}}" WITH LOGIN PASSWORD '{{password}}' VALID UNTIL '{{expiration}}' INHERIT;
+GRANT ro TO "{{name}}";
+EOF
+
+cd example && \
+vault write database/roles/readonly \
+    db_name=postgresql \
+    creation_statements=@readonly.sql \
+    default_ttl=1h \
+    max_ttl=24h
+```
+
+Request PostgreSQL credentials:
+
+```bash
+vault read database/creds/readonly
+
+Key                Value
+---                -----
+lease_id           database/creds/readonly/nzfqnlKwah0JSD9ashda0
+lease_duration     1h
+lease_renewable    true
+password           abcDEFGhiKML@!ABC
+username           v-root-readonly-ABCXYZ-123456789
+```
+
+Connect to the Postgres database and list all database users:
+
+```bash
+kubectl run postgresql-client --rm --tty -i --restart='Never' --namespace default --image docker.io/bitnami/postgresql:11.14.0-debian-10-r28 --env="PGPASSWORD=$POSTGRES_PASSWORD" --command -- psql --host postgresql -U postgres -d postgres -p 5432
+
+postgres=# SELECT usename, valuntil FROM pg_user;
+                     usename                     |        valuntil        
+-------------------------------------------------+------------------------
+ postgres                                        | 
+ v-root-readonly-ABCXYZ-123456789                | 2022-01-23 14:57:50+00
+(2 rows)
+```
+
+### 10.3. Manage leases
+
+The credentials are managed by the lease ID and remain valid for the lease duration (TTL) or until revoked. Once revoked the credentials are no longer valid.
+
+```bash
+vault list sys/leases/lookup/database/creds/readonly
+
+LEASE_ID=$(vault list -format=json sys/leases/lookup/database/creds/readonly | jq -r ".[0]")
+```
+
+Renew the lease for the database credential by passing its lease ID.
+
+```bash
+vault lease renew database/creds/readonly/$LEASE_ID
+```
+
+Revoke the lease without waiting for its expiration.
+
+```bash
+vault lease revoke database/creds/readonly/$LEASE_ID
+
+vault list sys/leases/lookup/database/creds/readonly
+No value found at sys/leases/lookup/database/creds/readonly/
+```
+
+Read new credentials from the readonly database role.
+
+```bash
+vault read database/creds/readonly
+```
+
+Revoke all the leases with the prefix database/creds/readonly.
+
+```bash
+vault lease revoke -prefix database/creds/readonly
+vault list sys/leases/lookup/database/creds/readonly
+No value found at sys/leases/lookup/database/creds/readonly/
+```
+
+### 10.4. Define a password policy
+
+The passwords you want to generate adhere to these requirements.
+
+- length of 20 characters
+
+- at least 1 uppercase character
+
+- at least 1 lowercase character
+
+- at least 1 number
+
+- at least 1 symbol
+
+```bash
+tee example/example_policy.hcl <<EOF
+length=20
+
+rule "charset" {
+  charset = "abcdefghijklmnopqrstuvwxyz"
+  min-chars = 1
+}
+
+rule "charset" {
+  charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+  min-chars = 1
+}
+
+rule "charset" {
+  charset = "0123456789"
+  min-chars = 1
+}
+
+rule "charset" {
+  charset = "!@#$%^&*"
+  min-chars = 1
+}
+EOF
+
+# Create a Vault password policy named example
+cd example && \
+vault write sys/policies/password/example policy=@example_policy.hcl
+vault read sys/policies/password/example/generate
+
+# Apply the password policy
+vault write database/config/postgresql \
+  password_policy="example"
+
+# Read credentials from the readonly database role.
+vault read database/creds/readonly
+```
+
+### 10.5. Define a username template
+
+```bash
+vault write database/config/postgresql \
+  username_template="vng-{{.RoleName}}-{{unix_time}}-{{random 8}}"
+
+vault read database/creds/readonly
+```
+
+## 11. Database Secrets Engine (Continue) - Database Static Roles and Credential Rotation
+
+Database secrets engine enables organizations to automatically rotate the password for existing database users. This makes it easy to integrate the existing applications with Vault and leverage the database secrets engine for better secret management.
+
+Connect to your database and run:
+
+```sql
+CREATE ROLE "vault-edu" WITH LOGIN PASSWORD 'mypassword';
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO "vault-edu";
+
+# Confirm role attributes.
+\du
+```
+
+First, create a file named, "rotation.sql" with following SQL statements.
+
+```sql
+ALTER USER "{{name}}" WITH PASSWORD '{{password}}';
+```
+
+Execute the following command to create a static role, education.
+
+```bash
+vault write database/config/postgresql \
+  plugin_name=postgresql-database-plugin \
+  connection_url="postgresql://{{username}}:{{password}}@postgresql:5432/postgres?sslmode=disable" \
+  allowed_roles="*" \
+  username="postgres" \
+  password=$POSTGRES_PASSWORD
+
+cd example && \
+vault write database/static-roles/education \
+  db_name=postgresql \
+  rotation_statements=@rotation.sql \
+  username="vault-edu" \
+  rotation_period=86400
+
+vault read database/static-roles/education
+```
+
+Validation:
+
+```bash
+vault read database/static-creds/education
+
+# Re-run the command and verify that returned password is the same with updated TTL.
+vault read database/static-creds/education
+```
+
+Verify that you can connect to the psql with username "vault-edu".
+
+```bash
+POSTGRES_PASSWORD="7TaVjS0O&0xQcR3uZQ%Z"
+kubectl run postgresql-client --rm --tty -i --restart='Never' --namespace default --image docker.io/bitnami/postgresql:11.14.0-debian-10-r28 --env="PGPASSWORD=$POSTGRES_PASSWORD" --command -- psql --host postgresql -U vault-edu -d postgres -p 5432
+```
+
+Manually rotate the password
+
+```bash
+vault write -f database/rotate-role/education
+
+vault read database/static-creds/education
 ```
