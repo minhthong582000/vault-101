@@ -1,0 +1,1 @@
+{"policy": "path \"auth/userpass/users/{{identity.entity.aliases.auth_userpass_af0a5107.name}}\" { capabilities = [\"read\",\"update\" ] allowed_parameters = {\"password\" = []}}"}

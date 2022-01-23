@@ -30,5 +30,5 @@ pushd data >/dev/null
 provision sys/auth
 provision sys/mounts
 provision sys/policy
-provision auth/userpass/users
+# provision auth/userpass/users
 popd > /dev/null
