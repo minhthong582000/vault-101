@@ -153,6 +153,8 @@ curl http://localhost:8080
 
 https://learn.hashicorp.com/tutorials/vault/kubernetes-sidecar?in=vault/kubernetes
 
+https://secrets-store-csi-driver.sigs.k8s.io/introduction.html
+
 Edit helm-vault-values.yml, disable csi and enable injector:
 
 ```yaml
