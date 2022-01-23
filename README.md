@@ -45,6 +45,10 @@ helm install vault hashicorp/vault --values helm-vault-values.yml
 
 ## 4. Unseal vault
 
+https://www.vaultproject.io/docs/concepts/seal
+
+https://learn.hashicorp.com/tutorials/vault/kubernetes-minikube?in=vault/kubernetes#initialize-and-unseal-vault
+
 ```bash
 kubectl exec vault-0 -- vault status
 
@@ -91,6 +95,8 @@ exit
 
 ### Enable kv
 
+https://learn.hashicorp.com/tutorials/vault/kubernetes-minikube?in=vault/kubernetes#set-a-secret-in-vault
+
 ```bash
 kubectl exec --stdin=true --tty=true vault-0 -- /bin/sh
 
@@ -104,6 +110,8 @@ exit
 ```
 
 ## 6. Enable the Kubernetes authentication method
+
+https://learn.hashicorp.com/tutorials/vault/kubernetes-minikube?in=vault/kubernetes#configure-kubernetes-authentication
 
 ```bash
 kubectl exec --stdin=true --tty=true vault-0 -- /bin/sh
@@ -142,6 +150,8 @@ curl http://localhost:8080
 ```
 
 ## 7. Vault Injector service via annotations
+
+https://learn.hashicorp.com/tutorials/vault/kubernetes-sidecar?in=vault/kubernetes
 
 Edit helm-vault-values.yml, disable csi and enable injector:
 
@@ -241,6 +251,8 @@ postgresql://db-readonly-user:db-secret-password@postgres:5432/wizard
 
 ## 8. Mount Vault Secrets through CSI volume
 
+https://learn.hashicorp.com/tutorials/vault/kubernetes-secret-store-driver?in=vault/kubernetes
+
 Delete old examples:
 
 ```bash
@@ -321,6 +333,8 @@ kubectl apply --filename example/03-vault-csi-mount/webapp-pod.yaml
 ```
 
 ## 9. Vault Best Practice
+
+https://learn.hashicorp.com/tutorials/vault/production-hardening
 
 ### 9.1. Restrict the use of root policy, and write fine-grained policies to practice least privileged
 
@@ -442,6 +456,8 @@ vault write auth/userpass/users/your-username password=your-new-password
 ```
 
 ## 10. Database Secrets Engine
+
+https://learn.hashicorp.com/tutorials/vault/database-secrets
 
 ### 10.1. Install postgreSQL using Bitnami helm chart:
 
@@ -673,6 +689,8 @@ vault read database/creds/readonly
 
 ## 11. Database Secrets Engine (Continue) - Database Static Roles and Credential Rotation
 
+https://learn.hashicorp.com/tutorials/vault/database-creds-rotation?in=vault/db-credentials
+
 Database secrets engine enables organizations to automatically rotate the password for existing database users. This makes it easy to integrate the existing applications with Vault and leverage the database secrets engine for better secret management.
 
 Connect to your database and run:
@@ -795,3 +813,9 @@ kubectl apply -f example/04-database-secret-engine/spc-vault-database.yaml
 
 kubectl apply -f example/04-database-secret-engine/webapp-deployment.yaml
 ```
+
+## Documentations
+
+https://www.vaultproject.io/docs/configuration/storage
+
+https://www.vaultproject.io/api/auth/userpass
