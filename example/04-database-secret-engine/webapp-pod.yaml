@@ -1,0 +1,31 @@
+kind: Pod
+apiVersion: v1
+metadata:
+  name: webapp-04
+spec:
+  serviceAccountName: webapp-sa
+  containers:
+  - image: jweissig/app:0.0.1
+    name: webapp
+    env:
+    - name: DB_USERNAME
+      valueFrom:
+        secretKeyRef:
+          name: vault-edu-database-creds-secret
+          key: username
+    - name: DB_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: vault-edu-database-creds-secret
+          key: password
+    volumeMounts:
+    - name: vault-edu-database
+      mountPath: "/mnt/secrets-store"
+      readOnly: true
+  volumes:
+    - name: vault-edu-database
+      csi:
+        driver: secrets-store.csi.k8s.io
+        readOnly: true
+        volumeAttributes:
+          secretProviderClass: "vault-edu-database"

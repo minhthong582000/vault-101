@@ -1,0 +1,25 @@
+apiVersion: secrets-store.csi.x-k8s.io/v1alpha1
+kind: SecretProviderClass
+metadata:
+  name: vault-edu-database
+  namespace: default
+spec:
+  provider: vault
+  secretObjects:
+  - secretName: vault-edu-database-creds-secret
+    type: Opaque
+    data:
+      - objectName: dbUsername # References dbUsername below
+        key: username # Key within k8s secret for this value
+      - objectName: dbPassword
+        key: password
+  parameters:
+    vaultAddress: "http://vault.default:8200"
+    roleName: "education"
+    objects: |
+      - objectName: "dbUsername"
+        secretPath: "database/static-creds/education"
+        secretKey: "username"
+      - objectName: "dbPassword"
+        secretPath: "database/static-creds/education"
+        secretKey: "password"

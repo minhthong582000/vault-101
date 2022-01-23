@@ -1,7 +1,7 @@
 kind: Pod
 apiVersion: v1
 metadata:
-  name: webapp
+  name: webapp-03
 spec:
   serviceAccountName: webapp-sa
   containers:

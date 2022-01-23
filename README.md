@@ -132,7 +132,7 @@ exit
 ```
 
 ```bash
-kubectl apply --filename deployment-01-webapp.yml
+kubectl apply --filename example/01-kubernetes-auth/deployment-01-webapp.yml
 
 kubectl port-forward \
     $(kubectl get pod -l app=webapp -o jsonpath="{.items[0].metadata.name}") \
@@ -142,6 +142,15 @@ curl http://localhost:8080
 ```
 
 ## 7. Vault Injector service via annotations
+
+Edit helm-vault-values.yml, disable csi and enable injector:
+
+```yaml
+injector:
+  enabled: true
+csi:
+  enabled: false
+```
 
 ```bash
 kubectl exec -it vault-0 -- /bin/sh
@@ -184,7 +193,7 @@ kubectl get serviceaccounts
 ```
 
 ```bash
-kubectl apply --filename deployment-orgchart.yaml
+kubectl apply --filename example/02-vault-injector/deployment-orgchart.yaml
 
 kubectl exec \
     $(kubectl get pod -l app=orgchart -o jsonpath="{.items[0].metadata.name}") \
@@ -196,7 +205,7 @@ command terminated with exit code 1
 patch-inject-secrets.yaml
 
 ```bash
-kubectl patch deployment orgchart --patch "$(cat patch-inject-secrets.yaml)"
+kubectl patch deployment orgchart --patch "$(cat example/02-vault-injector/patch-inject-secrets.yaml)"
 ```
 
 This new pod now launches two containers. The application container, named orgchart, and the Vault Agent container, named vault-agent.
@@ -222,7 +231,7 @@ kubectl exec \
 patch-inject-secrets-as-template.yaml
 
 ```bash
-kubectl patch deployment orgchart --patch "$(cat patch-inject-secrets-as-template.yaml)"
+kubectl patch deployment orgchart --patch "$(cat example/02-vault-injector/patch-inject-secrets-as-template.yaml)"
 
 kubectl exec \
     $(kubectl get pod -l app=orgchart -o jsonpath="{.items[0].metadata.name}") \
@@ -235,17 +244,13 @@ postgresql://db-readonly-user:db-secret-password@postgres:5432/wizard
 Delete old examples:
 
 ```bash
-kubectl delete -f deployment-01-webapp.yml
-kubectl delete -f deployment-orgchart.yaml
+kubectl delete -f example/01-kubernetes-auth/deployment-01-webapp.yml
+kubectl delete -f example/02-vault-injector/deployment-orgchart.yaml
 ```
 
 Edit helm-vault-values.yml, enable csi and disable injector:
 
 ```yaml
-server:
-  affinity: ""
-  ha:
-    enabled: true
 injector:
   enabled: false
 csi:
@@ -297,13 +302,13 @@ helm install csi-secrets-store secrets-store-csi-driver/secrets-store-csi-driver
 Fix mount empty issue on microk8s:
 
 ```bash
-helm install csi-secrets-store secrets-store-csi-driver/secrets-store-csi-driver --set linux.kubeletRootDir=/var/snap/microk8s/common/var/lib/kubelet
+helm upgrade csi-secrets-store secrets-store-csi-driver/secrets-store-csi-driver --set linux.kubeletRootDir=/var/snap/microk8s/common/var/lib/kubelet
 ```
 
 ### Define a SecretProviderClass resource
 
 ```bash
-kubectl apply --filename spc-vault-database.yaml
+kubectl apply --filename example/03-vault-csi-mount/spc-vault-database.yaml
 ```
 
 ### Create a pod with secret mounted
@@ -311,7 +316,7 @@ kubectl apply --filename spc-vault-database.yaml
 ```bash
 kubectl create serviceaccount webapp-sa
 
-kubectl apply --filename webapp-pod.yaml
+kubectl apply --filename example/03-vault-csi-mount/webapp-pod.yaml
 ```
 
 ## 9. Vault Best Practice
@@ -521,17 +526,17 @@ In the above step, you configured the PostgreSQL secrets engine with the allowed
 Define the SQL used to create credentials:
 
 ```bash
-tee example/readonly.sql <<EOF
+cat example/04-database-secret-engine/readonly.sql
 CREATE ROLE "{{name}}" WITH LOGIN PASSWORD '{{password}}' VALID UNTIL '{{expiration}}' INHERIT;
 GRANT ro TO "{{name}}";
-EOF
 
-cd example && \
+cd example/04-database-secret-engine && \
 vault write database/roles/readonly \
     db_name=postgresql \
     creation_statements=@readonly.sql \
     default_ttl=1h \
-    max_ttl=24h
+    max_ttl=24h && \
+cd -
 ```
 
 Request PostgreSQL credentials:
@@ -615,7 +620,7 @@ The passwords you want to generate adhere to these requirements.
 - at least 1 symbol
 
 ```bash
-tee example/example_policy.hcl <<EOF
+cat example/04-database-secret-engine/password_policy.hcl
 length=20
 
 rule "charset" {
@@ -637,12 +642,13 @@ rule "charset" {
   charset = "!@#$%^&*"
   min-chars = 1
 }
-EOF
 
 # Create a Vault password policy named example
-cd example && \
-vault write sys/policies/password/example policy=@example_policy.hcl
-vault read sys/policies/password/example/generate
+cd example/04-database-secret-engine && \
+vault write sys/policies/password/example policy=@password_policy.hcl && \
+cd -
+
+vault read sys/policies/password/example/generate 
 
 # Apply the password policy
 vault write database/config/postgresql \
@@ -691,12 +697,13 @@ vault write database/config/postgresql \
   username="postgres" \
   password=$POSTGRES_PASSWORD
 
-cd example && \
+cd example/04-database-secret-engine && \
 vault write database/static-roles/education \
   db_name=postgresql \
   rotation_statements=@rotation.sql \
   username="vault-edu" \
-  rotation_period=86400
+  rotation_period=86400 && \
+cd -
 
 vault read database/static-roles/education
 ```
@@ -723,4 +730,49 @@ Manually rotate the password
 vault write -f database/rotate-role/education
 
 vault read database/static-creds/education
+```
+
+Dynamic Database Credentials with Vault and Kubernetes
+
+```bash
+kubectl exec vault-0 -- vault status
+
+vault write auth/kubernetes/config \
+    issuer="https://kubernetes.default.svc.cluster.local" \
+    token_reviewer_jwt="$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
+    kubernetes_host="https://$KUBERNETES_PORT_443_TCP_ADDR:443" \
+    kubernetes_ca_cert=@/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+
+vault policy write internal-app - <<EOF
+path "secret/data/db-pass" {
+  capabilities = ["read"]
+}
+path "database/static-creds/education" {
+  capabilities = [ "read" ]
+}
+EOF
+
+vault write auth/kubernetes/role/education \
+  bound_service_account_names=webapp-sa \
+  bound_service_account_namespaces=default \
+  policies=internal-app \
+  ttl=24h
+
+exit
+```
+
+Enable sync secret on csi-secrets-store driver
+
+```bash
+helm upgrade csi-secrets-store secrets-store-csi-driver/secrets-store-csi-driver \
+--set syncSecret.enabled=true \
+--set linux.kubeletRootDir=/var/snap/microk8s/common/var/lib/kubelet # Set this value only if you are running on microk8s cluster
+```
+
+```bash
+kubectl create sa webapp-sa
+
+kubectl apply -f example/04-database-secret-engine/spc-vault-database.yaml
+
+kubectl apply -f example/04-database-secret-engine/webapp-pod.yaml
 ```
