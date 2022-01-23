@@ -578,9 +578,9 @@ Connect to the Postgres database and list all database users:
 kubectl run postgresql-client --rm --tty -i --restart='Never' --namespace default --image docker.io/bitnami/postgresql:11.14.0-debian-10-r28 --env="PGPASSWORD=$POSTGRES_PASSWORD" --command -- psql --host postgresql -U postgres -d postgres -p 5432
 
 postgres=# SELECT usename, valuntil FROM pg_user;
-                     usename                     |        valuntil        
+                     usename                     |        valuntil
 -------------------------------------------------+------------------------
- postgres                                        | 
+ postgres                                        |
  v-root-readonly-ABCXYZ-123456789                | 2022-01-23 14:57:50+00
 (2 rows)
 ```
@@ -668,7 +668,7 @@ cd example/04-database-secret-engine && \
 vault write sys/policies/password/example policy=@password_policy.hcl && \
 cd -
 
-vault read sys/policies/password/example/generate 
+vault read sys/policies/password/example/generate
 
 # Apply the password policy
 vault write database/config/postgresql \
@@ -682,7 +682,7 @@ vault read database/creds/readonly
 
 ```bash
 vault write database/config/postgresql \
-  username_template="vng-{{.RoleName}}-{{unix_time}}-{{random 8}}"
+  username_template="thongdepzai-{{.RoleName}}-{{unix_time}}-{{random 8}}"
 
 vault read database/creds/readonly
 ```
@@ -794,7 +794,7 @@ helm upgrade csi-secrets-store secrets-store-csi-driver/secrets-store-csi-driver
 --set linux.kubeletRootDir=/var/snap/microk8s/common/var/lib/kubelet # Set this value only if you are running on microk8s cluster
 ```
 
-(Optional) Install "Reloader": A Kubernetes controller to watch changes in ConfigMap and Secrets and do rolling upgrades on Pods with their associated Deployment, StatefulSet, DaemonSet and DeploymentConfig. 
+(Optional) Install "Reloader": A Kubernetes controller to watch changes in ConfigMap and Secrets and do rolling upgrades on Pods with their associated Deployment, StatefulSet, DaemonSet and DeploymentConfig.
 
 It will watch for changes in our database creds secret.
 
