@@ -765,8 +765,22 @@ Enable sync secret on csi-secrets-store driver
 
 ```bash
 helm upgrade csi-secrets-store secrets-store-csi-driver/secrets-store-csi-driver \
+--set enableSecretRotation=true \
+--set rotationPollInterval=1m \
 --set syncSecret.enabled=true \
 --set linux.kubeletRootDir=/var/snap/microk8s/common/var/lib/kubelet # Set this value only if you are running on microk8s cluster
+```
+
+(Optional) Install "Reloader": A Kubernetes controller to watch changes in ConfigMap and Secrets and do rolling upgrades on Pods with their associated Deployment, StatefulSet, DaemonSet and DeploymentConfig. 
+
+It will watch for changes in our database creds secret.
+
+```bash
+helm repo add stakater https://stakater.github.io/stakater-charts
+
+helm install reloader stakater/reloader \
+--set reloader.watchGlobally=false \
+--namespace default
 ```
 
 ```bash
@@ -774,5 +788,5 @@ kubectl create sa webapp-sa
 
 kubectl apply -f example/04-database-secret-engine/spc-vault-database.yaml
 
-kubectl apply -f example/04-database-secret-engine/webapp-pod.yaml
+kubectl apply -f example/04-database-secret-engine/webapp-deployment.yaml
 ```
