@@ -245,6 +245,7 @@ Delete old examples:
 
 ```bash
 kubectl delete -f example/01-kubernetes-auth/deployment-01-webapp.yml
+
 kubectl delete -f example/02-vault-injector/deployment-orgchart.yaml
 ```
 
@@ -425,7 +426,9 @@ vault policy read admin
 
 # Generate admin token
 vault token create -format=json -policy="admin"
+
 ADMIN_TOKEN=s.hFSdR7TSsXdZmeWsjuBL6gG2
+
 vault login $ADMIN_TOKEN
 
 # Revoke root token (Can be generate using unseal keys)
@@ -601,6 +604,7 @@ Revoke all the leases with the prefix database/creds/readonly.
 
 ```bash
 vault lease revoke -prefix database/creds/readonly
+
 vault list sys/leases/lookup/database/creds/readonly
 No value found at sys/leases/lookup/database/creds/readonly/
 ```
@@ -721,6 +725,7 @@ Verify that you can connect to the psql with username "vault-edu".
 
 ```bash
 POSTGRES_PASSWORD="7TaVjS0O&0xQcR3uZQ%Z"
+
 kubectl run postgresql-client --rm --tty -i --restart='Never' --namespace default --image docker.io/bitnami/postgresql:11.14.0-debian-10-r28 --env="PGPASSWORD=$POSTGRES_PASSWORD" --command -- psql --host postgresql -U vault-edu -d postgres -p 5432
 ```
 
